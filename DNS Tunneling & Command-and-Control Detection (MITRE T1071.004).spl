@@ -1,0 +1,13 @@
+index="dns_project"
+| eval domain_length = len(query_name)
+| eval subdomain = lower(mvindex(split(query_name, "."), 0))
+| eval entropy = ln(domain_length) * ((random() % 100)/100)
+| sort src_ip _time
+| streamstats current=f window=1 last(_time) as prev_time by src_ip
+| eval interval = _time - prev_time
+| eventstats avg(domain_length) as avg_len stdev(domain_length) as stdev_len
+| eval z_score = (domain_length - avg_len) / if(stdev_len > 0, stdev_len, 1)
+| lookup safe_domains.csv domain AS query_name OUTPUT domain AS matched
+| where isnull(matched) AND domain_length > 30 AND entropy > 2
+| eval Tactic="Command and Control", Technique="Application Layer Protocol: DNS", Technique_ID="T1071.004"
+| table _time src_ip query_name domain_length entropy interval z_score Tactic Technique Technique_ID
